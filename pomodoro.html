@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pomodoro Timer</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --work:#e85d5d;--work-bg:#fdf2f2;--work-glow:rgba(232,93,93,.15);
+    --rest:#4ecdc4;--rest-bg:#f0faf9;--rest-glow:rgba(78,205,196,.15);
+    --color:var(--work);--bg:var(--work-bg);--glow:var(--work-glow);
+  }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;
+    background:var(--bg);color:#2c2c2e;
+    display:flex;justify-content:center;align-items:center;
+    min-height:100vh;transition:background .6s ease;
+    user-select:none;-webkit-user-select:none;
+  }
+  .app{
+    display:flex;flex-direction:column;align-items:center;
+    gap:32px;padding:40px;width:360px;
+  }
+
+  /* Phase label */
+  .phase{
+    font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;
+    color:var(--color);transition:color .4s;
+  }
+
+  /* Timer ring */
+  .ring-wrap{position:relative;width:240px;height:240px}
+  .ring-bg,.ring-fg{
+    fill:none;stroke-width:6;stroke-linecap:round;
+    transform:rotate(-90deg);transform-origin:center;
+  }
+  .ring-bg{stroke:var(--glow);transition:stroke .4s}
+  .ring-fg{
+    stroke:var(--color);transition:stroke .4s,stroke-dashoffset .3s linear;
+    filter:drop-shadow(0 0 6px var(--glow));
+  }
+  .timer-text{
+    position:absolute;top:50%;left:50%;
+    transform:translate(-50%,-50%);
+    font-size:52px;font-weight:200;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:2px;color:#2c2c2e;
+  }
+
+  /* Controls */
+  .controls{display:flex;align-items:center;gap:32px}
+  .btn{
+    background:none;border:none;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    border-radius:50%;transition:all .2s;
+    color:#8e8e93;
+  }
+  .btn:hover{color:#2c2c2e;transform:scale(1.1)}
+  .btn:active{transform:scale(.95)}
+  .btn-main{
+    width:64px;height:64px;
+    background:var(--color);color:#fff !important;
+    box-shadow:0 4px 20px var(--glow);
+    transition:background .4s,box-shadow .4s;
+  }
+  .btn-main:hover{
+    background:var(--color);color:#fff !important;
+    box-shadow:0 6px 28px var(--glow);transform:scale(1.08);
+  }
+  .btn-side{width:44px;height:44px}
+
+  /* Pomodoro count */
+  .count{
+    display:flex;align-items:center;gap:8px;
+    min-height:24px;
+  }
+  .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--color);opacity:.7;
+    transition:background .4s;
+  }
+  .count-text{font-size:12px;color:#aeaeb2}
+
+  /* Settings row */
+  .settings{
+    display:flex;gap:16px;align-items:center;
+    font-size:12px;color:#aeaeb2;
+  }
+  .settings label{display:flex;align-items:center;gap:4px}
+  .settings input{
+    width:40px;border:1px solid #d1d1d6;border-radius:6px;
+    padding:2px 4px;text-align:center;font-size:12px;
+    background:#fff;color:#2c2c2e;
+  }
+  .settings input:focus{outline:none;border-color:var(--color)}
+
+  /* Keyboard hint */
+  .hint{
+    font-size:11px;color:#c7c7cc;margin-top:-8px;
+  }
+  .hint kbd{
+    display:inline-block;padding:1px 5px;
+    border:1px solid #d1d1d6;border-radius:4px;
+    font-size:10px;background:#f9f9fb;
+  }
+
+  /* SVG icons */
+  svg{fill:currentColor}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="count" id="count"></div>
+
+  <div class="phase" id="phase">FOCUS</div>
+
+  <div class="ring-wrap">
+    <svg viewBox="0 0 240 240" width="240" height="240">
+      <circle class="ring-bg" cx="120" cy="120" r="108"/>
+      <circle class="ring-fg" id="ring" cx="120" cy="120" r="108"
+              stroke-dasharray="678.58" stroke-dashoffset="0"/>
+    </svg>
+    <div class="timer-text" id="time">25:00</div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-side" id="btnReset" title="Reset">
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h6V4l-2.35 2.35z"/>
+      </svg>
+    </button>
+    <button class="btn btn-main" id="btnPlay" title="Start / Pause">
+      <svg width="28" height="28" viewBox="0 0 24 24" id="iconPlay">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+    </button>
+    <button class="btn btn-side" id="btnSkip" title="Skip">
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="settings">
+    <label>Focus <input type="number" id="workMin" value="25" min="1" max="90"> min</label>
+    <label>Break <input type="number" id="breakMin" value="5" min="1" max="30"> min</label>
+  </div>
+
+  <div class="hint"><kbd>Space</kbd> start/pause &nbsp; <kbd>R</kbd> reset &nbsp; <kbd>S</kbd> skip</div>
+</div>
+
+<script>
+const CIRCUM = 2 * Math.PI * 108; // ~678.58
+
+const $ = id => document.getElementById(id);
+const ring      = $('ring');
+const timeEl    = $('time');
+const phaseEl   = $('phase');
+const countEl   = $('count');
+const btnPlay   = $('btnPlay');
+const iconPlay  = $('iconPlay');
+const btnReset  = $('btnReset');
+const btnSkip   = $('btnSkip');
+const workInput = $('workMin');
+const breakInput = $('breakMin');
+
+let workSec, breakSec, remaining, isRunning, isWork, pomodoros, timer;
+
+function init() {
+  workSec   = (parseInt(workInput.value) || 25) * 60;
+  breakSec  = (parseInt(breakInput.value) || 5) * 60;
+  remaining = workSec;
+  isRunning = false;
+  isWork    = true;
+  pomodoros = 0;
+  clearInterval(timer);
+  render();
+  renderCount();
+  applyTheme();
+}
+
+function render() {
+  const total = isWork ? workSec : breakSec;
+  const pct   = 1 - remaining / total;
+  ring.style.strokeDashoffset = CIRCUM * (1 - pct);
+
+  const m = String(Math.floor(remaining / 60)).padStart(2, '0');
+  const s = String(remaining % 60).padStart(2, '0');
+  timeEl.textContent = `${m}:${s}`;
+
+  phaseEl.textContent = isWork ? 'FOCUS' : 'BREAK';
+  iconPlay.innerHTML = isRunning
+    ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+    : '<path d="M8 5v14l11-7z"/>';
+}
+
+function renderCount() {
+  countEl.innerHTML = '';
+  for (let i = 0; i < pomodoros; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    countEl.appendChild(d);
+  }
+  if (pomodoros === 0) {
+    countEl.innerHTML = '<span class="count-text">No pomodoros yet</span>';
+  }
+}
+
+function applyTheme() {
+  const root = document.documentElement.style;
+  if (isWork) {
+    root.setProperty('--color', 'var(--work)');
+    root.setProperty('--bg', 'var(--work-bg)');
+    root.setProperty('--glow', 'var(--work-glow)');
+  } else {
+    root.setProperty('--color', 'var(--rest)');
+    root.setProperty('--bg', 'var(--rest-bg)');
+    root.setProperty('--glow', 'var(--rest-glow)');
+  }
+}
+
+function toggle() {
+  if (isRunning) { pause(); } else { start(); }
+}
+
+function start() {
+  if (remaining <= 0) return;
+  isRunning = true;
+  render();
+  timer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      remaining = 0;
+      clearInterval(timer);
+      isRunning = false;
+      onComplete();
+    }
+    render();
+  }, 1000);
+}
+
+function pause() {
+  isRunning = false;
+  clearInterval(timer);
+  render();
+}
+
+function reset() {
+  pause();
+  remaining = isWork ? workSec : breakSec;
+  render();
+}
+
+function skip() {
+  pause();
+  switchPhase();
+}
+
+function onComplete() {
+  playSound();
+  if (isWork) {
+    pomodoros++;
+    renderCount();
+  }
+  switchPhase();
+  // Auto-start next phase
+  setTimeout(start, 500);
+}
+
+function switchPhase() {
+  isWork = !isWork;
+  remaining = isWork ? workSec : breakSec;
+  applyTheme();
+  render();
+}
+
+// --- Sound (Web Audio API, no external files) ---
+function playSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = isWork
+      ? [523.25, 659.25, 783.99]  // C5 E5 G5 - cheerful
+      : [392, 523.25, 659.25];    // G4 C5 E5 - calm
+
+    notes.forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.2 + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.2);
+      osc.stop(ctx.currentTime + i * 0.2 + 0.6);
+    });
+  } catch (_) {}
+}
+
+// --- Events ---
+btnPlay.addEventListener('click', toggle);
+btnReset.addEventListener('click', reset);
+btnSkip.addEventListener('click', skip);
+
+workInput.addEventListener('change', () => {
+  if (!isRunning && isWork) {
+    workSec = (parseInt(workInput.value) || 25) * 60;
+    remaining = workSec;
+    render();
+  }
+});
+breakInput.addEventListener('change', () => {
+  if (!isRunning && !isWork) {
+    breakSec = (parseInt(breakInput.value) || 5) * 60;
+    remaining = breakSec;
+    render();
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space')  { e.preventDefault(); toggle(); }
+  if (e.code === 'KeyR')   { reset(); }
+  if (e.code === 'KeyS')   { skip(); }
+});
+
+// --- Init ---
+init();
+</script>
+</body>
+</html>
